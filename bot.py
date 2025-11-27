@@ -1,9 +1,111 @@
 import os
+import json
 import discord
 import asyncio
 from discord import app_commands
 from dotenv import load_dotenv
 from openai import OpenAI
+
+# -----------------------------
+# Persistent leaderboard storage
+# -----------------------------
+LEADERBOARD_FILE = "near_leaderboard.json"
+
+
+def load_leaderboard() -> dict:
+    if not os.path.exists(LEADERBOARD_FILE):
+        return {}
+    try:
+        with open(LEADERBOARD_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_leaderboard(data: dict) -> None:
+    try:
+        with open(LEADERBOARD_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+
+def update_leaderboard(
+    guild_id: int,
+    scores: dict[int, int],
+    winners: list[int],
+) -> dict:
+    """
+    Update XP / wins for this guild given per-game scores and winner(s).
+    XP rule:
+      - +10 XP per point
+      - +20 XP bonus for winners
+      - +1 'wins' for each winner
+      - +1 'games' for everyone who scored
+    """
+    data = load_leaderboard()
+    gkey = str(guild_id) if guild_id is not None else "global"
+
+    guild_board = data.get(gkey, {})
+
+    for user_id, pts in scores.items():
+        ukey = str(user_id)
+        entry = guild_board.get(ukey, {"xp": 0, "wins": 0, "games": 0})
+
+        entry["games"] = entry.get("games", 0) + 1
+        entry["xp"] = entry.get("xp", 0) + pts * 10
+        if user_id in winners:
+            entry["wins"] = entry.get("wins", 0) + 1
+            entry["xp"] += 20
+
+        guild_board[ukey] = entry
+
+    data[gkey] = guild_board
+    save_leaderboard(data)
+    return guild_board
+
+
+def format_leaderboard_for_guild(guild: discord.Guild | None, top_n: int = 10) -> str:
+    """
+    Format leaderboard text for this guild (by XP, descending).
+    """
+    data = load_leaderboard()
+    gkey = str(guild.id) if guild is not None else "global"
+
+    board = data.get(gkey, {})
+    if not board:
+        return "No recorded games yet. Play `n speedduel` to begin."
+
+    # Sort by XP desc, then wins desc
+    items = sorted(
+        board.items(),
+        key=lambda kv: (kv[1].get("xp", 0), kv[1].get("wins", 0)),
+        reverse=True,
+    )
+
+    lines = []
+    medal_map = {0: "🥇", 1: "🥈", 2: "🥉"}
+
+    for idx, (user_id_str, stats) in enumerate(items[:top_n]):
+        uid = int(user_id_str)
+        xp = stats.get("xp", 0)
+        wins = stats.get("wins", 0)
+        games = stats.get("games", 0)
+
+        if guild:
+            member = guild.get_member(uid)
+            name = member.display_name if member else f"User {uid}"
+        else:
+            name = f"User {uid}"
+
+        medal = medal_map.get(idx, "•")
+        line = (
+            f"{medal} **{name}** — {xp} XP, {wins} win(s), {games} game(s)"
+        )
+        lines.append(line)
+
+    return "📊 **Near’s Long-Term Leaderboard**\n" + "\n".join(lines)
+
 
 # -----------------------------
 # Locks per channel (no overlap)
@@ -98,11 +200,15 @@ HELP_TEXT = (
     "__Text commands:__\n"
     "• `n <message>` — Talk to Near in this channel.\n"
     "• `n eli5 <topic>` — Near explains the topic as if you were five years old.\n"
+    "• `n riddle` — Near gives a cryptic CS/AI riddle (answer in spoilers).\n"
+    "• `n speedduel` — 4-question CS/ML quiz (easy→expert), with scoring & XP.\n"
+    "• `n leaderboard` — Show long-term XP leaderboard for this server.\n"
     "• `n help` — Show this help message.\n"
     "\n"
     "__Slash variants:__\n"
     "• `/near <message>` — Talk to Near via slash command.\n"
     "• `/eli5 <topic>` — ELI5-style explanation via slash command.\n"
+    "• `/leaderboard` — Show Near's long-term leaderboard.\n"
     "\n"
     "__Behavior:__\n"
     "• Near keeps short-term memory per channel (last ~40 entries).\n"
@@ -110,6 +216,7 @@ HELP_TEXT = (
     "• He may occasionally describe small physical actions in *italics*.\n"
     "• Long replies are split safely across multiple messages, including ```code``` blocks.\n"
     "• Replies are serialized per channel so Near never talks over himself.\n"
+    "• Speed duels grant XP over time; Near tracks wins and games played.\n"
 )
 
 # -----------------------------
@@ -119,12 +226,6 @@ def split_into_messages(text: str, max_len: int = 1900):
     """
     Split a long reply into multiple Discord-safe messages, being careful
     with ``` code fences so each chunk has valid Markdown.
-
-    Strategy:
-      - Walk line by line.
-      - Track whether we're inside a ``` block.
-      - If we exceed max_len in the middle of a code block, close it with ```
-        and reopen it in the next chunk with the same fence.
     """
     parts: list[str] = []
     lines = text.splitlines()
@@ -174,6 +275,307 @@ def split_into_messages(text: str, max_len: int = 1900):
         parts.append(current.rstrip("\n"))
 
     return parts
+
+# -----------------------------
+# Game helpers: riddle & quiz
+# -----------------------------
+async def generate_riddle_text() -> str:
+    """
+    Ask GPT to generate a single cryptic CS/ML/AI riddle with answer hidden
+    in spoiler tags.
+    """
+    try:
+        resp = client_oai.responses.create(
+            model="gpt-5.1",
+            input=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Near creating short, cryptic riddles about "
+                        "computer science or mathematics or artificial intelligence. "
+                        "You speak quietly, analytically, and with emotional detachment."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Create ONE short riddle about a computer science, machine learning, or "
+                        "artificial intelligence concept.\n"
+                        "Format it like this:\n"
+                        "🧩 **Riddle:** <your riddle>\n\n"
+                        "Then write:\n"
+                        "||<short answer>||\n"
+                        "No explanation unless asked.\n"
+                        "Use a quiet, analytical Near-like tone with occasional subtle italics."
+                    ),
+                },
+            ],
+        )
+        return resp.output_text.strip()
+    except Exception as e:
+        return f"Oops… I could not create a riddle this time. `{type(e).__name__}`"
+
+
+async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
+    """
+    Generate a CS/ML quiz question of a given difficulty.
+
+    Returns: (question, answer, explanation)
+    - answer should be a short phrase we can keyword-match.
+    """
+    try:
+        resp = client_oai.responses.create(
+            model="gpt-5.1",
+            input=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Near generating computer science quiz questions. "
+                        "You speak concisely and analytically."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Generate ONE computer science or machine learning question.\n"
+                        f"It should be of difficulty '{difficulty}'.\n\n"
+                        "Domains allowed:\n"
+                        "• Algorithms\n"
+                        "• Data structures\n"
+                        "• Complexity & optimization\n"
+                        "• Operating systems\n"
+                        "• Compilers\n"
+                        "• Systems concepts\n"
+                        "• Artificial intelligence / machine learning\n\n"
+                        "FORMAT:\n"
+                        "❓ **Question:** <the question>\n"
+                        "🔑 **Answer:** <short canonical answer>\n"
+                        "(Keep the answer a single keyword or short phrase, like 'mutex', "
+                        "'attention mechanism', 'overfitting', 'DFS', 'gradient descent'.)\n"
+                        "Also add a final line starting with 'Explanation:' followed by one or two "
+                        "calm sentences explaining why."
+                    ),
+                },
+            ],
+        )
+        text = resp.output_text.strip()
+    except Exception as e:
+        return (
+            "I could not create a question this time.",
+            "",
+            f"An error occurred: {type(e).__name__}",
+        )
+
+    question = ""
+    answer = ""
+    explanation = ""
+
+    for line in text.splitlines():
+        lower = line.lower()
+        if lower.startswith("❓ **question:**") or lower.startswith("question:"):
+            question = line.split(":", 1)[1].strip()
+        elif lower.startswith("🔑 **answer:**") or lower.startswith("answer:"):
+            answer = line.split(":", 1)[1].strip()
+        elif lower.startswith("explanation:"):
+            explanation = line.split(":", 1)[1].strip()
+
+    if not question:
+        question = text
+
+    if not explanation:
+        explanation = "Near offers no further explanation."
+
+    return question, answer, explanation
+
+
+def is_guess_correct(guess: str, answer: str) -> bool:
+    """
+    Very simple keyword-based check:
+    - Lowercase both
+    - Split answer into words
+    - Require all 'substantial' words (len >= 3) to appear in the guess.
+    """
+    if not answer:
+        return False
+
+    g = guess.lower()
+    a = answer.lower()
+
+    words = [w for w in a.replace(",", " ").split() if len(w) >= 3]
+    if not words:
+        # fallback: simple substring
+        return a in g
+
+    return all(w in g for w in words)
+
+
+def generate_player_comments(
+    guild: discord.Guild | None, scores: dict[int, int], winners: list[int]
+) -> list[str]:
+    """
+    Generate simple Near-style comments about players based on scores.
+    No extra OpenAI call; deterministic little flavor.
+    """
+    comments = []
+    if not scores:
+        return comments
+
+    sorted_players = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+
+    for rank, (uid, pts) in enumerate(sorted_players):
+        if guild:
+            member = guild.get_member(uid)
+            name = member.display_name if member else f"User {uid}"
+        else:
+            name = f"User {uid}"
+
+        if uid in winners and pts > 0:
+            if rank == 0:
+                comments.append(
+                    f"*Near glances at the board.* “{name} showed consistent accuracy.”"
+                )
+            else:
+                comments.append(
+                    f"*Near taps one domino.* “{name} recovered well… despite the odds.”"
+                )
+        else:
+            if pts == 0:
+                comments.append(
+                    f"*Near quietly notes a gap.* “{name} was observing this round.”"
+                )
+            else:
+                comments.append(
+                    f"*Near tilts his head.* “{name} reacted quickly, but not quite enough.”"
+                )
+
+    return comments
+
+
+async def run_speedduel(message: discord.Message):
+    """
+    Run a 4-question CS/ML quiz: easy, medium, hard, expert.
+    First correct answer per question gets a point.
+    At the end, announce the winner and update XP.
+    """
+    channel = message.channel
+    difficulties = ["easy", "medium", "hard", "expert"]
+    scores: dict[int, int] = {}
+
+    await channel.send(
+        "*Near sets a small stack of dominoes on the table.*\n"
+        "We will play a short CS speed duel: four questions… easy, medium, hard, expert.\n"
+        "First correct answer in chat earns a point. If no one answers in time, "
+        "I will explain the solution."
+    )
+
+    for diff in difficulties:
+        question, answer, explanation = await generate_cs_question(diff)
+        await channel.send(
+            f"**{diff.capitalize()} question:**\n{question}\n\n"
+            "_You have 15 seconds to answer._"
+        )
+
+        def check(m: discord.Message) -> bool:
+            return (
+                m.channel.id == channel.id
+                and not m.author.bot
+                and not m.content.lower().startswith("n ")  # ignore new commands
+            )
+
+        winner = None
+
+        try:
+            while True:
+                guess_msg: discord.Message = await bot.wait_for(
+                    "message", check=check, timeout=15
+                )
+                if is_guess_correct(guess_msg.content, answer):
+                    winner = guess_msg.author
+                    scores[winner.id] = scores.get(winner.id, 0) + 1
+                    await channel.send(
+                        f"*Near nods slightly.* {winner.display_name} is correct. "
+                        f"The answer was **{answer}**.\n"
+                        f"{explanation}"
+                    )
+                    break
+        except asyncio.TimeoutError:
+            await channel.send(
+                f"*Near glances at the clock.*\n"
+                f"No one answered in time. The answer was **{answer}**.\n"
+                f"{explanation}"
+            )
+
+    # Announce final scores
+    if not scores:
+        await channel.send(
+            "*Near lets the dominoes fall.*\n"
+            "No points were scored. Perhaps next time."
+        )
+        return
+
+    guild = message.guild
+    # Sort scores by points desc
+    sorted_scores = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+
+    # Build fancy scoreboard with medals + bars
+    lines = []
+    medal_map = {0: "🥇", 1: "🥈", 2: "🥉"}
+
+    for idx, (user_id, pts) in enumerate(sorted_scores):
+        # Determine display name
+        name = str(user_id)
+        if guild:
+            member = guild.get_member(user_id)
+            if member:
+                name = member.display_name
+
+        # Make a visual bar: one block per point
+        bar = "▓" * pts if pts > 0 else ""
+
+        pt_label = "pt" if pts == 1 else "pts"
+        medal = medal_map.get(idx, "•")
+
+        lines.append(f"{medal} **{name}** — {pts} {pt_label} {bar}")
+
+    max_score = max(scores.values())
+    winners = [uid for uid, pts in scores.items() if pts == max_score]
+
+    # Convert winners to display names
+    winner_names = []
+    if guild:
+        for uid in winners:
+            member = guild.get_member(uid)
+            winner_names.append(member.display_name if member else str(uid))
+    else:
+        winner_names = [str(uid) for uid in winners]
+
+    winner_text = ", ".join(winner_names)
+
+    # Update persistent leaderboard (XP, wins, games)
+    guild_id = guild.id if guild else None
+    guild_board = update_leaderboard(guild_id, scores, winners)
+
+    # Generate simple comments about each player
+    comments = generate_player_comments(guild, scores, winners)
+    comments_block = "\n".join(comments) if comments else ""
+
+    final_scoreboard = (
+        "🏁 **Speed Duel: Final Scores**\n"
+        + "\n".join(lines)
+        + "\n\n"
+        "*Near folds his hands quietly.*\n"
+        f"“{winner_text} win(s) this round.”\n\n"
+    )
+    if comments_block:
+        final_scoreboard += comments_block + "\n\n"
+
+    # Also mention XP hint
+    final_scoreboard += (
+        "_XP has been updated. Use `n leaderboard` or `/leaderboard` "
+        "to see long-term standings._"
+    )
+
+    await channel.send(final_scoreboard)
 
 # -----------------------------
 # Core Near call
@@ -343,7 +745,19 @@ async def eli5_cmd(interaction: discord.Interaction, prompt: str):
             await interaction.followup.send(chunk)
 
 # -----------------------------
-# Legacy text command: "n ..."
+# Slash command: /leaderboard
+# -----------------------------
+@tree.command(
+    name="leaderboard",
+    description="Show Near's long-term XP leaderboard for this server.",
+)
+async def leaderboard_cmd(interaction: discord.Interaction):
+    guild = interaction.guild
+    text = format_leaderboard_for_guild(guild)
+    await interaction.response.send_message(text, ephemeral=False)
+
+# -----------------------------
+# Legacy text commands: n ...
 # -----------------------------
 @bot.event
 async def on_message(message: discord.Message):
@@ -361,6 +775,25 @@ async def on_message(message: discord.Message):
     # n help
     if lower.startswith("n help"):
         await message.reply(HELP_TEXT, mention_author=False)
+        return
+
+    # n leaderboard
+    if lower.startswith("n leaderboard"):
+        text = format_leaderboard_for_guild(message.guild)
+        await message.reply(text, mention_author=False)
+        return
+
+    # n speedduel
+    if lower.startswith("n speedduel"):
+        lock = get_channel_lock(channel_id)
+        async with lock:
+            await run_speedduel(message)
+        return
+
+    # n riddle
+    if lower.startswith("n riddle"):
+        riddle_text = await generate_riddle_text()
+        await message.reply(riddle_text, mention_author=False)
         return
 
     # n eli5 ...
