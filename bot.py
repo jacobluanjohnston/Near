@@ -522,7 +522,7 @@ async def run_speedduel(message: discord.Message):
 
     await channel.send(
         "🎲 *Near sets a small stack of dominoes on the table. ⚀ ⚁ ⚂ ⚃ ⚄ ⚅*\n"
-        "We will play a short CS speed duel: four questions… three easy, one medium.\n"
+        "We will play a short CS speed duel: three questions… two easy, one medium.\n"
         "First correct answer in chat earns a point. If no one answers in time, "
         "I will explain the solution.\n\n"
         "To answer, just type your guess normally in chat.\n"
