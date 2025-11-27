@@ -163,6 +163,7 @@ client_oai = OpenAI(api_key=OPENAI_API_KEY)
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
@@ -406,6 +407,11 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
                         "'mutex', 'attention mechanism', 'overfitting', 'DFS', "
                         "'gradient descent', 'hash table', 'Bayes rule', "
                         "'pipeline hazard', 'L1 cache', or 'bitwise AND'."
+                        
+                        "\nIMPORTANT:\n"
+                        "- Do NOT use LaTeX or notation like \\binom{n}{2}.\n"
+                        "- Do NOT use parentheses with backslashes.\n"
+                        "- Instead, say things like 'n choose 2' or 'n(n-1)/2 / 2' in plain text.\n"
                     )
                 },
             ],
@@ -864,6 +870,15 @@ async def on_message(message: discord.Message):
     if lower.startswith("n riddle"):
         riddle_text = await generate_riddle_text()
         await message.reply(riddle_text, mention_author=False)
+
+        # 🔹 add riddle to history so Near can reference it later
+        channel_id = message.channel.id
+        history = history_by_channel.get(channel_id, [])
+        history.append({"role": "assistant", "content": riddle_text})
+        if len(history) > 40:
+            history = history[-40:]
+        history_by_channel[channel_id] = history
+
         return
 
     # n eli5 ...
