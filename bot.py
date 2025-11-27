@@ -122,35 +122,40 @@ def split_into_messages(text: str, max_len: int = 1900):
     return parts
 
 
-async def get_near_reply(channel_id: int, user_name: str, user_text: str) -> str:
+async def get_near_reply(
+    channel_id: int,
+    user_name: str,
+    user_text: str,
+    extra_system: list[dict] | None = None,
+) -> str:
     """
     Core logic to talk to GPT-5.1 as Near and update history.
-    Used by both "n " and /near.
     """
-    # Get existing history for this channel, or start fresh
     history = history_by_channel.get(channel_id, [])
 
     # Add new user message
-    history.append(
-        {
-            "role": "user",
-            "content": f"{user_name}: {user_text}",
-        }
-    )
-    # Trim history so it doesn't get too big (keep last 40 messages)
+    history.append({"role": "user", "content": f"{user_name}: {user_text}"})
+
     if len(history) > 40:
         history = history[-40:]
+
+    # base system message
+    system_messages = [{"role": "system", "content": NEAR_PROMPT}]
+
+    # allow overrides from special commands like /eli5
+    if extra_system:
+        system_messages.extend(extra_system)
 
     try:
         response = client_oai.responses.create(
             model="gpt-5.1",
-            input=[{"role": "system", "content": NEAR_PROMPT}] + history,
+            input=system_messages + history,
         )
         reply_text = response.output_text
     except Exception as e:
         reply_text = f"Oops, something went wrong talking to OpenAI: `{type(e).__name__}`"
 
-    # Add assistant reply and save history
+    # Save response to memory
     history.append({"role": "assistant", "content": reply_text})
     history_by_channel[channel_id] = history
 
@@ -216,18 +221,65 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
-    # Simple trigger: messages starting with "n "
-    prefix = "n "
-    if not message.content.startswith(prefix):
-        return
-
-    user_text = message.content[len(prefix):].strip()
-    if not user_text:
-        await message.reply("What do you want to ask? 🙂")
-        return
+    content = message.content
+    lower = content.lower().lstrip()
 
     channel_id = message.channel.id
     user_name = message.author.display_name
+
+    # --------- Case 1: "n eli5 ..." ----------
+    eli5_prefix = "n eli5"
+    if lower.startswith(eli5_prefix):
+        # everything after "n eli5"
+        user_text = content[len(eli5_prefix):].strip(" ,:-").strip()
+
+        if not user_text:
+            await message.reply("What do you want me to explain simply? 🙂")
+            return
+
+        extra_system = [
+            {
+                "role": "system",
+                "content": (
+                    "For this reply only, explain the topic as if you were "
+                    "speaking to a five-year-old child. "
+                    "Use very simple words, short sentences, gentle tone, and "
+                    "tiny analogies. Maintain Near's quiet, calm personality, "
+                    "but simplify everything drastically."
+                ),
+            }
+        ]
+
+        lock = get_channel_lock(channel_id)
+        async with lock:
+            async with message.channel.typing():
+                reply_text = await get_near_reply(
+                    channel_id,
+                    user_name,
+                    user_text,
+                    extra_system=extra_system,
+                )
+
+        chunks = split_into_messages(reply_text)
+        first = True
+        for chunk in chunks:
+            if first:
+                await message.reply(chunk, mention_author=False)
+                first = False
+            else:
+                await message.channel.send(chunk)
+        return  # important: don't fall through to normal "n " handling
+
+    # --------- Case 2: normal "n ..." ----------
+    prefix = "n "
+    if not lower.startswith(prefix):
+        return
+
+    # keep original spacing from the actual content string (not lower)
+    user_text = content[len(prefix):].strip()
+    if not user_text:
+        await message.reply("What do you want to ask? 🙂")
+        return
 
     lock = get_channel_lock(channel_id)
     async with lock:
@@ -244,6 +296,54 @@ async def on_message(message: discord.Message):
         else:
             await message.channel.send(chunk)
 
+@tree.command(
+    name="eli5",
+    description="Ask Near to explain something as if you were five years old.",
+)
+@app_commands.describe(prompt="What do you want Near to explain simply?")
+async def eli5_cmd(interaction: discord.Interaction, prompt: str):
+    channel = interaction.channel
+    if channel is None:
+        await interaction.response.send_message(
+            "I can't see a channel context for this interaction.", ephemeral=True
+        )
+        return
+
+    channel_id = channel.id
+    user_name = interaction.user.display_name
+
+    # Show thinking indicator
+    await interaction.response.defer(thinking=True)
+
+    lock = get_channel_lock(channel_id)
+    async with lock:
+        extra_system = [
+            {
+                "role": "system",
+                "content": (
+                    "For this reply only, explain the topic as if you were "
+                    "speaking to a five-year-old child. "
+                    "Use very simple words, short sentences, gentle tone, and "
+                    "tiny analogies. Maintain Near's quiet, calm personality, "
+                    "but simplify everything drastically."
+                ),
+            }
+        ]
+        reply_text = await get_near_reply(
+            channel_id,
+            user_name,
+            prompt,
+            extra_system=extra_system,
+        )
+
+    chunks = split_into_messages(reply_text)
+    first = True
+    for chunk in chunks:
+        if first:
+            await interaction.followup.send(chunk)
+            first = False
+        else:
+            await interaction.followup.send(chunk)
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
