@@ -75,8 +75,8 @@ HELP_TEXT = (
     "• Near keeps short-term memory per channel (last ~40 exchanges).\n"
     "• He sees your display name.\n"
     "• He may occasionally describe small physical actions in *italics* (dominoes, marbles, etc.).\n"
-    "• Long replies are split safely across multiple messages, including ```code``` blocks. (Thx Chahid)\n"
-    "• Replies are serialized per channel so Near never talks over himself. (Thx AM)\n"
+    "• Long replies are split safely across multiple messages, including ```code``` blocks.\n"
+    "• Replies are serialized per channel so Near never talks over himself.\n"
 )
 
 def split_into_messages(text: str, max_len: int = 1900):
@@ -171,6 +171,28 @@ async def get_near_reply(
             input=system_messages + history,
         )
         reply_text = response.output_text
+
+        # --- cost calculation footer ---
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            # these attributes should exist; fall back to 0 if not
+            input_tokens = getattr(usage, "input_tokens", 0)
+            output_tokens = getattr(usage, "output_tokens", 0)
+
+            # Pricing:
+            #  - input:  $1.25 per 1M tokens
+            #  - output: $10.00 per 1M tokens
+            input_cost = (input_tokens / 1_000_000) * 1.25
+            output_cost = (output_tokens / 1_000_000) * 10.0
+            total_cost = input_cost + output_cost
+
+            cost_footer = (
+                f"\n\n_(approx cost this reply: "
+                f"${total_cost:.5f} — input {input_tokens} tok, "
+                f"output {output_tokens} tok)_"
+            )
+            reply_text = reply_text + cost_footer
+
     except Exception as e:
         reply_text = f"Oops, something went wrong talking to OpenAI: `{type(e).__name__}`"
 
