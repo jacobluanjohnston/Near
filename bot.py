@@ -62,21 +62,63 @@ NEAR_PROMPT = (
 
 def split_into_messages(text: str, max_len: int = 1900):
     """
-    Split a long reply into multiple Discord-safe messages.
-    First split on double newlines (paragraphs), then hard-wrap if needed.
+    Split a long reply into multiple Discord-safe messages, being careful
+    with ``` code fences so each chunk has valid Markdown.
+
+    Strategy:
+      - Walk line by line.
+      - Track whether we're inside a ``` block.
+      - If we exceed max_len in the middle of a code block, close it with ```
+        and reopen it in the next chunk with the same fence.
     """
-    parts = []
-    for para in text.split("\n\n"):
-        para = para.strip()
-        if not para:
-            continue
-        if len(para) <= max_len:
-            parts.append(para)
-        else:
-            start = 0
-            while start < len(para):
-                parts.append(para[start : start + max_len])
-                start += max_len
+    parts: list[str] = []
+    lines = text.splitlines()
+    current = ""
+    current_len = 0
+    in_code = False
+    current_fence = ""  # e.g. ``` or ```python
+
+    for line in lines:
+        line_str = line + "\n"
+        stripped = line.strip()
+
+        # Detect fence line
+        is_fence = stripped.startswith("```")
+
+        # If adding this line would exceed max_len, flush current chunk
+        if current_len + len(line_str) > max_len and current:
+            if in_code:
+                # close code block before splitting
+                if not current.rstrip().endswith("```"):
+                    current += "```\n"
+                    current_len += 4
+            parts.append(current.rstrip("\n"))
+            current = ""
+            current_len = 0
+
+            # if we're still inside a code block, reopen in new chunk
+            if in_code and current_fence:
+                current += current_fence + "\n"
+                current_len = len(current)
+
+        # handle fence toggling AFTER possible split
+        if is_fence:
+            # entering or leaving a code block
+            if not in_code:
+                in_code = True
+                current_fence = stripped  # remember full fence line
+            else:
+                in_code = False
+                current_fence = ""
+
+        current += line_str
+        current_len += len(line_str)
+
+    if current.strip():
+        if in_code and not current.rstrip().endswith("```"):
+            current += "```\n"
+        parts.append(current.rstrip("\n"))
+
     return parts
 
 
