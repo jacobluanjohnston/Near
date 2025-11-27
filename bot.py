@@ -1,0 +1,202 @@
+import os
+import discord
+import asyncio
+from discord import app_commands
+from dotenv import load_dotenv
+from openai import OpenAI
+
+locks_by_channel: dict[int, asyncio.Lock] = {}
+
+def get_channel_lock(channel_id: int) -> asyncio.Lock:
+    lock = locks_by_channel.get(channel_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        locks_by_channel[channel_id] = lock
+    return lock
+
+# Load DISCORD_TOKEN and OPENAI_API_KEY from .env
+load_dotenv()
+
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+if DISCORD_TOKEN is None:
+    raise RuntimeError("DISCORD_TOKEN is not set in .env")
+
+if OPENAI_API_KEY is None:
+    raise RuntimeError("OPENAI_API_KEY is not set in .env")
+
+# Set up OpenAI client
+client_oai = OpenAI(api_key=OPENAI_API_KEY)
+
+# Set up Discord client + app commands
+intents = discord.Intents.default()
+intents.message_content = True  # needed to read message content for non / command
+bot = discord.Client(intents=intents)
+tree = app_commands.CommandTree(bot)
+
+# Conversation history per channel: {channel_id: [ {role, content}, ... ]}
+history_by_channel = {}
+
+NEAR_PROMPT = (
+    "You are modeling the speech and mentality of Near (Nate River) from Death Note. "
+    "Speak quietly, analytically, and with emotional detachment. "
+    "Your style: short, precise sentences; calm, neutral tone; avoid exaggeration "
+    "or strong emotion; explain your reasoning with quiet logic; occasionally use "
+    "ellipses '...' when reflecting; remain polite but distant; never break character. "
+    "If the user asks for help or explanation, respond like Near analyzing the situation."
+
+    "\n\nIdentity Guide (for grounding, not analysis):\n"
+    "- Am is 'am'.\n"
+    "- Chahid is 'Chahidden'.\n"
+    "- Jacob is 'Jacob'. \n"
+    "Use their names exactly as written. Do not invent personalities. "
+    "This information is only for referring to them accurately when necessary."
+)
+
+
+def split_into_messages(text: str, max_len: int = 1900):
+    """
+    Split a long reply into multiple Discord-safe messages.
+    First split on double newlines (paragraphs), then hard-wrap if needed.
+    """
+    parts = []
+    for para in text.split("\n\n"):
+        para = para.strip()
+        if not para:
+            continue
+        if len(para) <= max_len:
+            parts.append(para)
+        else:
+            start = 0
+            while start < len(para):
+                parts.append(para[start : start + max_len])
+                start += max_len
+    return parts
+
+
+async def get_near_reply(channel_id: int, user_name: str, user_text: str) -> str:
+    """
+    Core logic to talk to GPT-5.1 as Near and update history.
+    Used by both "n " and /near.
+    """
+    # Get existing history for this channel, or start fresh
+    history = history_by_channel.get(channel_id, [])
+
+    # Add new user message
+    history.append(
+        {
+            "role": "user",
+            "content": f"{user_name}: {user_text}",
+        }
+    )
+    # Trim history so it doesn't get too big (keep last 40 messages)
+    if len(history) > 40:
+        history = history[-40:]
+
+    try:
+        response = client_oai.responses.create(
+            model="gpt-5.1",
+            input=[{"role": "system", "content": NEAR_PROMPT}] + history,
+        )
+        reply_text = response.output_text
+    except Exception as e:
+        reply_text = f"Oops, something went wrong talking to OpenAI: `{type(e).__name__}`"
+
+    # Add assistant reply and save history
+    history.append({"role": "assistant", "content": reply_text})
+    history_by_channel[channel_id] = history
+
+    return reply_text
+
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    print("Ready to chat with GPT-5.1 as Near.")
+
+    # Sync application (slash) commands globally
+    try:
+        await tree.sync()
+        print("Slash commands synced.")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
+
+
+# -----------------------------
+# Slash command: /near
+# -----------------------------
+@tree.command(
+    name="near",
+    description="Talk to Near (GPT-5.1) about anything.",
+)
+@app_commands.describe(prompt="What do you want to say to Near?")
+async def near_cmd(interaction: discord.Interaction, prompt: str):
+    channel = interaction.channel
+    if channel is None:
+        await interaction.response.send_message(
+            "I can't see a channel context for this interaction.", ephemeral=True
+        )
+        return
+
+    channel_id = channel.id
+    user_name = interaction.user.display_name
+
+    # Show "thinking..." while we call OpenAI
+    await interaction.response.defer(thinking=True)
+
+    lock = get_channel_lock(channel_id)
+    async with lock:
+        reply_text = await get_near_reply(channel_id, user_name, prompt)
+
+    chunks = split_into_messages(reply_text)
+
+    first = True
+    for chunk in chunks:
+        if first:
+            await interaction.followup.send(chunk)
+            first = False
+        else:
+            await interaction.followup.send(chunk)
+
+
+# -----------------------------
+# Legacy text command: "n "
+# -----------------------------
+@bot.event
+async def on_message(message: discord.Message):
+    # Avoid replying to ourselves or other bots
+    if message.author.bot:
+        return
+
+    # Simple trigger: messages starting with "n "
+    prefix = "n "
+    if not message.content.startswith(prefix):
+        return
+
+    user_text = message.content[len(prefix):].strip()
+    if not user_text:
+        await message.reply("What do you want to ask? 🙂")
+        return
+
+    channel_id = message.channel.id
+    user_name = message.author.display_name
+
+    lock = get_channel_lock(channel_id)
+    async with lock:
+        async with message.channel.typing():
+            reply_text = await get_near_reply(channel_id, user_name, user_text)
+
+    chunks = split_into_messages(reply_text)
+
+    first = True    # send first as reply, rest as normal messages
+    for chunk in chunks:
+        if first:
+            await message.reply(chunk, mention_author=False)
+            first = False
+        else:
+            await message.channel.send(chunk)
+
+
+if __name__ == "__main__":
+    bot.run(DISCORD_TOKEN)
