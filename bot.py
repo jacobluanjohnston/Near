@@ -59,6 +59,25 @@ NEAR_PROMPT = (
     "This information is only for referring to them accurately when necessary."
 )
 
+HELP_TEXT = (
+    "**Near Bot – Commands & Behavior**\n"
+    "\n"
+    "__Text commands:__\n"
+    "• `n <message>` — Talk to Near in this channel.\n"
+    "• `n eli5 <topic>` — Near explains the topic as if you were five years old.\n"
+    "• `n help` — Show this help message.\n"
+    "\n"
+    "__Slash variants:__\n"
+    "• `/near <message>` — See above.\n"
+    "• `/eli5 <topic>` — See above.\n"
+    "\n"
+    "__Behavior:__\n"
+    "• Near keeps short-term memory per channel (last ~40 exchanges).\n"
+    "• He sees your display name.\n"
+    "• He may occasionally describe small physical actions in *italics* (dominoes, marbles, etc.).\n"
+    "• Long replies are split safely across multiple messages, including ```code``` blocks. (Thx Chahid)\n"
+    "• Replies are serialized per channel so Near never talks over himself. (Thx AM)\n"
+)
 
 def split_into_messages(text: str, max_len: int = 1900):
     """
@@ -222,10 +241,15 @@ async def on_message(message: discord.Message):
         return
 
     content = message.content
-    lower = content.lower().lstrip()
+    lower = content.lower()
 
     channel_id = message.channel.id
     user_name = message.author.display_name
+
+    # --------- Case 0: "n help" ----------
+    if lower.startswith("n help"):
+        await message.reply(HELP_TEXT, mention_author=False)
+        return
 
     # --------- Case 1: "n eli5 ..." ----------
     eli5_prefix = "n eli5"
