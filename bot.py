@@ -201,7 +201,7 @@ HELP_TEXT = (
     "• `n <message>` — Talk to Near in this channel.\n"
     "• `n eli5 <topic>` — Near explains the topic as if you were five years old.\n"
     "• `n riddle` — Near gives a cryptic CS/AI riddle (answer in spoilers).\n"
-    "• `n speedduel` — 4-question CS/ML quiz (easy→expert), with scoring & XP.\n"
+    "• `n speedduel` — 3ion CS/ML quiz (2x easy, 1x medium), with scoring & XP.\n"
     "• `n leaderboard` — Show long-term XP leaderboard for this server.\n"
     "• `n help` — Show this help message.\n"
     "\n"
@@ -326,25 +326,43 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
     # Difficulty-specific guidance
     if difficulty == "easy":
         difficulty_hint = (
-            "Treat 'easy' as intro-level CS. Use fundamentals like: variables, loops, "
-            "conditionals, arrays, lists, stacks, queues, basic recursion, simple BFS/DFS, "
-            "big-O of simple algorithms, or beginner ML ideas like 'overfitting' or "
-            "'train/test split'. Avoid concurrency, distributed systems, and deep training internals."
+            "Treat 'easy' as intro-level CS/math/ML.\n"
+            "- CS: variables, loops, conditionals, arrays/lists, stacks, queues, "
+            "simple recursion, basic BFS/DFS, big-O of simple loops.\n"
+            "- Low-level: binary/hex conversion, bitwise AND/OR/XOR, shifting, "
+            "what a register is, what RAM is, what the stack is conceptually.\n"
+            "- Discrete: basic sets, simple logic (and/or/not), small graphs, counting.\n"
+            "- Stats/ML: mean/median, simple probability, train/test split, "
+            "overfitting vs underfitting.\n"
+            "Avoid concurrency, distributed systems, GPU internals, or advanced math.\n"
+            "These are only suggestions — choose any beginner-level concept that fits."
         )
     elif difficulty == "medium":
         difficulty_hint = (
-            "Treat 'medium' as standard undergrad CS. You may use topics like: trees, graphs, "
-            "hash tables, more interesting recursion, asymptotic analysis, basic concurrency ideas "
-            "(critical sections, race conditions), caching, gradient descent, regularization, "
-            "and common neural network concepts. Avoid niche research topics."
+            "Treat 'medium' as standard undergrad CS/DS.\n"
+            "- CS: trees, hash tables, graph traversal in detail, simple DP, "
+            "O(n log n) vs O(n^2), caching, race conditions.\n"
+            "- Low-level: stack frames, function calling conventions, basic assembly "
+            "(mov/add/call), memory alignment, cache levels (L1/L2/L3), endianness.\n"
+            "- Discrete: combinatorics (n choose k), simple proofs (induction idea), "
+            "graph properties.\n"
+            "- Stats/ML: conditional probability, Bayes rule, expectation/variance, "
+            "gradient descent, logistic regression, bias–variance tradeoff.\n"
+            "Avoid niche research topics.\n"
+            "These examples are suggestions — use any reasonable mid-level topic."
         )
     else:
-        # hard / expert
         difficulty_hint = (
-            "Treat 'hard' or 'expert' as advanced. You may use concurrency patterns, lock-free "
-            "data structures, distributed systems, scaling transformer training (data/pipeline/"
-            "tensor model parallelism), or more subtle ML topics. Still keep the answer a single, "
-            "recognizable phrase or keyword."
+            "Treat 'hard' or 'expert' as advanced undergraduate/early graduate.\n"
+            "- CS/systems: concurrency patterns, lock-free data structures, "
+            "distributed systems, consistency models, OS scheduling, virtual memory.\n"
+            "- Low-level: pipeline hazards, superscalar execution, branch prediction, "
+            "SIMD/vectorization, memory coherence.\n"
+            "- Theory: NP-completeness, amortized analysis, advanced graph algorithms.\n"
+            "- ML/stats: attention mechanisms, RL policy gradients, optimization quirks, "
+            "generalization theory.\n"
+            "Final answer must remain a short keyword/phrase.\n"
+            "These domains are suggestions — choose any appropriately challenging concept."
         )
 
     try:
@@ -361,24 +379,34 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
                 {
                     "role": "user",
                     "content": (
-                        f"Generate ONE computer science or machine learning question.\n"
+                        f"Generate ONE computer science, discrete math, statistics, or "
+                        f"machine learning question.\n"
                         f"It should be of difficulty '{difficulty}'.\n\n"
+
+                        "Difficulty guidance (these are suggestions, not hard rules):\n"
+                        f"{difficulty_hint}\n\n"
+
                         "Domains allowed:\n"
-                        "• Algorithms\n"
-                        "• Data structures\n"
-                        "• Complexity & optimization\n"
-                        "• Operating systems\n"
+                        "• Algorithms and data structures\n"
+                        "• Discrete math (logic, sets, graphs, counting)\n"
+                        "• Probability and statistics\n"
+                        "• Operating systems / systems concepts\n"
                         "• Compilers\n"
-                        "• Systems concepts\n"
-                        "• Artificial intelligence / machine learning\n\n"
+                        "• Artificial intelligence / machine learning\n"
+                        "• Computer architecture (pipelines, caches, registers, memory hierarchy)\n"
+                        "• Assembly / low-level programming (stack frames, calling conventions, bitwise ops)\n"
+                        "• Binary/hex math and representation\n\n"
+
                         "FORMAT:\n"
                         "❓ **Question:** <the question>\n"
                         "🔑 **Answer:** <short canonical answer>\n"
                         "💬 Explanation: <one or two calm sentences explaining why>\n\n"
+
                         "Keep the answer a single keyword or short phrase, like "
                         "'mutex', 'attention mechanism', 'overfitting', 'DFS', "
-                        "'gradient descent', 'hash table', etc."
-                    ),
+                        "'gradient descent', 'hash table', 'Bayes rule', "
+                        "'pipeline hazard', 'L1 cache', or 'bitwise AND'."
+                    )
                 },
             ],
         )
@@ -477,35 +505,47 @@ def generate_player_comments(
 
 async def run_speedduel(message: discord.Message):
     """
-    Run a 4-question CS/ML quiz: easy, medium, hard, expert.
+    Run a 3-question CS/ML quiz: two easy, one medium.
     First correct answer per question gets a point.
     At the end, announce the winner and update XP.
     """
     channel = message.channel
-    difficulties = ["easy", "medium", "hard", "expert"]
+    # difficulties = ["easy", "medium", "hard", "expert"]
+    difficulties = ["easy", "easy", "medium"]
     scores: dict[int, int] = {}
 
     await channel.send(
         "🎲 *Near sets a small stack of dominoes on the table. ⚀ ⚁ ⚂ ⚃ ⚄ ⚅*\n"
-        "We will play a short CS speed duel: four questions… easy, medium, hard, expert.\n"
+        "We will play a short CS speed duel: four questions… three easy, one medium.\n"
         "First correct answer in chat earns a point. If no one answers in time, "
         "I will explain the solution.\n\n"
         "To answer, just type your guess normally in chat.\n"
         "Do **not** start answers with `n ` — I treat those as commands, not guesses."
     )
 
+    # nice labels per difficulty
+    label_map = {
+        "easy": "🟢 **Easy question**",
+        "medium": "🟡 **Medium question**",
+        "hard": "🟠 **Hard question**",
+        "expert": "🔴 **Expert question**",
+    }
+
     for diff in difficulties:
         question, answer, explanation = await generate_cs_question(diff)
+
+        label = label_map.get(diff, f"**{diff.capitalize()} question**")
+
         await channel.send(
-            f"**{diff.capitalize()} question:**\n{question}\n\n"
-            "_You have 10 seconds to answer._"
+            f"{label}:\n{question}\n\n"
+            "⏳ You have **10 seconds** to answer."
         )
 
         def check(m: discord.Message) -> bool:
             return (
-                m.channel.id == channel.id
-                and not m.author.bot
-                and not m.content.lower().startswith("n ")  # ignore new commands
+                    m.channel.id == channel.id
+                    and not m.author.bot
+                    and not m.content.lower().startswith("n ")  # ignore new commands
             )
 
         winner = None
@@ -523,6 +563,8 @@ async def run_speedduel(message: discord.Message):
                         f"The answer was **{answer}**.\n"
                         f"{explanation}"
                     )
+                    # 🔹 give people time to read before next question
+                    await asyncio.sleep(6)
                     break
         except asyncio.TimeoutError:
             await channel.send(
@@ -530,6 +572,8 @@ async def run_speedduel(message: discord.Message):
                 f"No one answered in time. The answer was **{answer}**.\n"
                 f"{explanation}"
             )
+            # 🔹 also pause after timeouts
+            await asyncio.sleep(4)
 
     # Announce final scores
     if not scores:
