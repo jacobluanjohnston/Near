@@ -323,6 +323,30 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
     Returns: (question, answer, explanation)
     - answer should be a short phrase we can keyword-match.
     """
+    # Difficulty-specific guidance
+    if difficulty == "easy":
+        difficulty_hint = (
+            "Treat 'easy' as intro-level CS. Use fundamentals like: variables, loops, "
+            "conditionals, arrays, lists, stacks, queues, basic recursion, simple BFS/DFS, "
+            "big-O of simple algorithms, or beginner ML ideas like 'overfitting' or "
+            "'train/test split'. Avoid concurrency, distributed systems, and deep training internals."
+        )
+    elif difficulty == "medium":
+        difficulty_hint = (
+            "Treat 'medium' as standard undergrad CS. You may use topics like: trees, graphs, "
+            "hash tables, more interesting recursion, asymptotic analysis, basic concurrency ideas "
+            "(critical sections, race conditions), caching, gradient descent, regularization, "
+            "and common neural network concepts. Avoid niche research topics."
+        )
+    else:
+        # hard / expert
+        difficulty_hint = (
+            "Treat 'hard' or 'expert' as advanced. You may use concurrency patterns, lock-free "
+            "data structures, distributed systems, scaling transformer training (data/pipeline/"
+            "tensor model parallelism), or more subtle ML topics. Still keep the answer a single, "
+            "recognizable phrase or keyword."
+        )
+
     try:
         resp = client_oai.responses.create(
             model="gpt-5.1",
@@ -350,10 +374,10 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
                         "FORMAT:\n"
                         "❓ **Question:** <the question>\n"
                         "🔑 **Answer:** <short canonical answer>\n"
-                        "(Keep the answer a single keyword or short phrase, like 'mutex', "
-                        "'attention mechanism', 'overfitting', 'DFS', 'gradient descent'.)\n"
-                        "Also add a final line starting with 'Explanation:' followed by one or two "
-                        "calm sentences explaining why."
+                        "💬 Explanation: <one or two calm sentences explaining why>\n\n"
+                        "Keep the answer a single keyword or short phrase, like "
+                        "'mutex', 'attention mechanism', 'overfitting', 'DFS', "
+                        "'gradient descent', 'hash table', etc."
                     ),
                 },
             ],
@@ -376,7 +400,7 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
             question = line.split(":", 1)[1].strip()
         elif lower.startswith("🔑 **answer:**") or lower.startswith("answer:"):
             answer = line.split(":", 1)[1].strip()
-        elif lower.startswith("explanation:"):
+        elif lower.startswith("💬 explanation:"):
             explanation = line.split(":", 1)[1].strip()
 
     if not question:
@@ -462,17 +486,19 @@ async def run_speedduel(message: discord.Message):
     scores: dict[int, int] = {}
 
     await channel.send(
-        "*Near sets a small stack of dominoes on the table.*\n"
+        "🎲 *Near sets a small stack of dominoes on the table. ⚀ ⚁ ⚂ ⚃ ⚄ ⚅*\n"
         "We will play a short CS speed duel: four questions… easy, medium, hard, expert.\n"
         "First correct answer in chat earns a point. If no one answers in time, "
-        "I will explain the solution."
+        "I will explain the solution.\n\n"
+        "To answer, just type your guess normally in chat.\n"
+        "Do **not** start answers with `n ` — I treat those as commands, not guesses."
     )
 
     for diff in difficulties:
         question, answer, explanation = await generate_cs_question(diff)
         await channel.send(
             f"**{diff.capitalize()} question:**\n{question}\n\n"
-            "_You have 15 seconds to answer._"
+            "_You have 10 seconds to answer._"
         )
 
         def check(m: discord.Message) -> bool:
@@ -487,20 +513,20 @@ async def run_speedduel(message: discord.Message):
         try:
             while True:
                 guess_msg: discord.Message = await bot.wait_for(
-                    "message", check=check, timeout=15
+                    "message", check=check, timeout=10
                 )
                 if is_guess_correct(guess_msg.content, answer):
                     winner = guess_msg.author
                     scores[winner.id] = scores.get(winner.id, 0) + 1
                     await channel.send(
-                        f"*Near nods slightly.* {winner.display_name} is correct. "
+                        f"🧠 *Near nods slightly.* {winner.display_name} is correct. "
                         f"The answer was **{answer}**.\n"
                         f"{explanation}"
                     )
                     break
         except asyncio.TimeoutError:
             await channel.send(
-                f"*Near glances at the clock.*\n"
+                f"⏱️ *Near glances at the clock.*\n"
                 f"No one answered in time. The answer was **{answer}**.\n"
                 f"{explanation}"
             )
@@ -508,7 +534,7 @@ async def run_speedduel(message: discord.Message):
     # Announce final scores
     if not scores:
         await channel.send(
-            "*Near lets the dominoes fall.*\n"
+            "🧩 *Near lets the dominoes fall.*\n"
             "No points were scored. Perhaps next time."
         )
         return
@@ -563,7 +589,7 @@ async def run_speedduel(message: discord.Message):
         "🏁 **Speed Duel: Final Scores**\n"
         + "\n".join(lines)
         + "\n\n"
-        "*Near folds his hands quietly.*\n"
+        "📘 *Near folds his hands quietly.*\n"
         f"“{winner_text} win(s) this round.”\n\n"
     )
     if comments_block:
