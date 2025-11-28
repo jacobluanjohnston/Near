@@ -3,7 +3,7 @@
 > Near is a custom Discord bot powered by **OpenAI GPT-5.1**, designed with a very specific personality:
 quiet, observant, analytical, emotionally restrained, calm, and subtly creative.
 
-> Near rarely wastes words. He analyzes carefully, answers precisely, and occasionally interacts through
+> Near "rarely wastes words". He analyzes carefully, answers precisely, and occasionally interacts through
 small physical gestures (*a domino clicks, a marble rolls*).  
 He feels like a quiet genius sitting across the table, solving puzzles while talking to you.
 
