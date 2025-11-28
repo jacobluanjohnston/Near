@@ -32,9 +32,15 @@ Handles long messages and code blocks without breaking formatting.
 ### ✔ Serialized replies  
 Per-channel locks ensure Near never talks over himself.
 
-### ✔ Cost and token estimation
-Appends logs on every message (except riddles, for aesthetic purposes).
+### ✔ Cost estimation
+The bot estimates cost using the usage object returned by the OpenAI Responses API on every reply.
+**Specifically**:
+- `usage.input_tokens` – number tokens were sent in (system + history + user message) this request
+- `usage.output_tokens` – number of tokens the model generated in its reply
 
+These are multiplied by the current per-million token prices and appended as a small cost footer to each message.
+- input:  $1.25 per 1M tokens  
+- output: $10.00 per 1M tokens 
 ---
 
 ![near_example.png](demo/near_example.png)
