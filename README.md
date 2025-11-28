@@ -77,8 +77,7 @@ project/
 ├── README.md                 # This file
 └── diagrams/
     └── near_architecture.png # Architecture diagram
-└── demo/
-    └── nears_example.png     # Screenshot #1 (as seen above)
+└── demo/                     # Screenshots
 ```
 
 ---
