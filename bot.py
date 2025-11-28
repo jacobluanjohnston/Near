@@ -202,7 +202,7 @@ HELP_TEXT = (
     "• `n <message>` — Talk to Near in this channel.\n"
     "• `n eli5 <topic>` — Near explains the topic as if you were five years old.\n"
     "• `n riddle` — Near gives a cryptic CS/AI riddle (answer in spoilers).\n"
-    "• `n speedduel` — 3ion CS/ML quiz (2x easy, 1x medium), with scoring & XP.\n"
+    "• `n speedduel` — 3-question CS/ML quiz (2x easy, 1x medium), with scoring & XP.\n"
     "• `n leaderboard` — Show long-term XP leaderboard for this server.\n"
     "• `n help` — Show this help message.\n"
     "\n"
@@ -327,43 +327,21 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
     # Difficulty-specific guidance
     if difficulty == "easy":
         difficulty_hint = (
-            "Treat 'easy' as intro-level CS/math/ML.\n"
-            "- CS: variables, loops, conditionals, arrays/lists, stacks, queues, "
-            "simple recursion, basic BFS/DFS, big-O of simple loops.\n"
-            "- Low-level: binary/hex conversion, bitwise AND/OR/XOR, shifting, "
-            "what a register is, what RAM is, what the stack is conceptually.\n"
-            "- Discrete: basic sets, simple logic (and/or/not), small graphs, counting.\n"
-            "- Stats/ML: mean/median, simple probability, train/test split, "
-            "overfitting vs underfitting.\n"
-            "Avoid concurrency, distributed systems, GPU internals, or advanced math.\n"
-            "These are only suggestions — choose any beginner-level concept that fits."
+            "Easy questions should focus on basic, intuitive topics taught in introductory "
+            "computer science or machine learning courses. Keep them small and simple, "
+            "requiring only one-step reasoning. Avoid formulas or specialized terminology."
         )
     elif difficulty == "medium":
         difficulty_hint = (
-            "Treat 'medium' as standard undergrad CS/DS.\n"
-            "- CS: trees, hash tables, graph traversal in detail, simple DP, "
-            "O(n log n) vs O(n^2), caching, race conditions.\n"
-            "- Low-level: stack frames, function calling conventions, basic assembly "
-            "(mov/add/call), memory alignment, cache levels (L1/L2/L3), endianness.\n"
-            "- Discrete: combinatorics (n choose k), simple proofs (induction idea), "
-            "graph properties.\n"
-            "- Stats/ML: conditional probability, Bayes rule, expectation/variance, "
-            "gradient descent, logistic regression, bias–variance tradeoff.\n"
-            "Avoid niche research topics.\n"
-            "These examples are suggestions — use any reasonable mid-level topic."
+            "Medium questions should involve standard undergraduate concepts but still be "
+            "answerable in one or two steps. Use widely understood ideas, not niche details. "
+            "Keep language plain. Avoid referencing specific algorithms by name unless natural."
         )
     else:
         difficulty_hint = (
-            "Treat 'hard' or 'expert' as advanced undergraduate/early graduate.\n"
-            "- CS/systems: concurrency patterns, lock-free data structures, "
-            "distributed systems, consistency models, OS scheduling, virtual memory.\n"
-            "- Low-level: pipeline hazards, superscalar execution, branch prediction, "
-            "SIMD/vectorization, memory coherence.\n"
-            "- Theory: NP-completeness, amortized analysis, advanced graph algorithms.\n"
-            "- ML/stats: attention mechanisms, RL policy gradients, optimization quirks, "
-            "generalization theory.\n"
-            "Final answer must remain a short keyword/phrase.\n"
-            "These domains are suggestions — choose any appropriately challenging concept."
+            "Hard questions should require deeper conceptual understanding but remain "
+            "answerable by a short phrase. You may use advanced ideas, but avoid anything "
+            "esoteric or overly academic. Keep the question self-contained."
         )
 
     try:
@@ -380,51 +358,35 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
                 {
                     "role": "user",
                     "content": (
-                        f"Generate ONE computer science, discrete math, statistics, or "
-                        f"machine learning question.\n"
+                        f"Generate ONE quiz question about a topic that could appear in a typical "
+                        f"college-level computer science, mathematics, or machine learning course.\n"
                         f"It should be of difficulty '{difficulty}'.\n\n"
 
-                        "Difficulty guidance (these are suggestions, not hard rules):\n"
+                        "Difficulty guidance (these are suggestions, not rules):\n"
                         f"{difficulty_hint}\n\n"
-                        
-                        "### IMPORTANT RULES:\n"
-                        "- Do NOT reuse previous questions.\n"
-                        "- Prefer randomness within allowed domains.\n\n"
 
-                        "Domains allowed:\n"
-                        "• Algorithms and data structures\n"
-                        "• Discrete math (logic, sets, graphs, counting)\n"
-                        "• Probability and statistics\n"
-                        "• Operating systems / systems concepts\n"
-                        "• Compilers\n"
-                        "• Artificial intelligence / machine learning\n"
-                        "• Computer architecture (pipelines, caches, registers, memory hierarchy)\n"
-                        "• Assembly / low-level programming (stack frames, calling conventions, bitwise ops)\n"
-                        "• Binary/hex math and representation\n\n"
+                        "General rules:\n"
+                        "- Do not reuse the wording of any previous question.\n"
+                        "- Make the topic selection varied and unpredictable.\n"
+                        "- You may choose *any* reasonable CS/DS/ML/math concept for this level.\n"
+                        "- Keep the question self-contained.\n\n"
 
-                        "Requirements:\n"
-                        "- Do NOT reuse the exact same question wording you used previously.\n"
-                        "- Vary the topic and phrasing across calls.\n\n"
-                        
                         "FORMAT:\n"
                         "❓ **Question:** <the question>\n"
                         "🔑 **Answer:** <short canonical answer>\n"
                         "💬 Explanation: <one or two calm sentences explaining why>\n\n"
 
-                        "Keep the answer a single keyword or short phrase, like "
-                        "'mutex', 'attention mechanism', 'overfitting', 'DFS', "
-                        "'gradient descent', 'hash table', 'Bayes rule', "
-                        "'pipeline hazard', 'L1 cache', or 'bitwise AND'."
-                        
-                        "\nIMPORTANT:\n"
-                        "- Do NOT use LaTeX or notation like \\binom{n}{2}.\n"
-                        "- Do NOT use parentheses with backslashes.\n"
-                        "- Instead, say things like 'n choose 2' or 'n(n-1)/2 / 2' in plain text.\n"
+                        "Answer rules:\n"
+                        "- The answer must be a single short phrase (one concept).\n"
+                        "- Do not use LaTeX or any \\commands.\n"
+                        "- Use plain text when needed.\n"
                     )
                 },
             ],
             temperature=0.8,  # <- add randomness
+            # temperature=1.0,
             top_p=0.9,  # <- nucleus sampling
+            # top_p=1.0,
         )
         text = resp.output_text.strip()
     except Exception as e:
@@ -439,7 +401,7 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
     explanation = ""
 
     for line in text.splitlines():
-        lower = line.lower()
+        lower = line.lower().lstrip()
         if lower.startswith("❓ **question:**") or lower.startswith("question:"):
             question = line.split(":", 1)[1].strip()
         elif lower.startswith("🔑 **answer:**") or lower.startswith("answer:"):
