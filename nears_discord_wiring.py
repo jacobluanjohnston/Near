@@ -17,7 +17,7 @@ from nears_brain import (
 # Help text (Discord-facing)
 # -----------------------------
 HELP_TEXT = (
-    "**Near Bot – Commands & Behavior**\n"
+    "**Near Bot – Commands**\n"
     "\n"
     "__Text commands:__\n"
     "• `n <message>` — Talk to Near in this channel.\n"
@@ -27,14 +27,7 @@ HELP_TEXT = (
     "\n"
     "__Slash variants:__\n"
     "• `/near <message>` — Talk to Near via slash command.\n"
-    "• `/eli5 <topic>` — ELI5-style explanation via slash command.\n"
-    "\n"
-    "__Behavior:__\n"
-    "• Near keeps short-term memory per channel (last ~40 entries).\n"
-    "• He sees your display name.\n"
-    "• He may occasionally describe small physical actions in *italics*.\n"
-    "• Long replies are split safely across multiple messages, including ```code``` blocks.\n"
-    "• Replies are serialized per channel so Near never talks over himself.\n"
+    "• `/eli5 <topic>` — ELI5-style explanation via slash command."
 )
 
 # -----------------------------
