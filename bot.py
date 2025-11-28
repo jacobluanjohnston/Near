@@ -398,6 +398,10 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
                         "• Assembly / low-level programming (stack frames, calling conventions, bitwise ops)\n"
                         "• Binary/hex math and representation\n\n"
 
+                        "Requirements:\n"
+                        "- Do NOT reuse the exact same question wording you used previously.\n"
+                        "- Vary the topic and phrasing across calls.\n\n"
+                        
                         "FORMAT:\n"
                         "❓ **Question:** <the question>\n"
                         "🔑 **Answer:** <short canonical answer>\n"
@@ -415,6 +419,8 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
                     )
                 },
             ],
+            temperature=0.8,  # <- add randomness
+            top_p=0.9,  # <- nucleus sampling
         )
         text = resp.output_text.strip()
     except Exception as e:
