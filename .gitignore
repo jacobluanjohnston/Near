@@ -1,6 +1,3 @@
-# Ignore server leaderboard file
-near_leaderboard.json
-
 # Ignore environment variables
 .env
 
