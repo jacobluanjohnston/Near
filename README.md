@@ -82,3 +82,7 @@ project/
 
 ## © License
 MIT License — free to modify and use however you wish.
+
+---
+
+![near_example2.png](demo/near_example2.png)
