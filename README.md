@@ -21,7 +21,7 @@ He feels like a quiet genius sitting across the table, solving puzzles while tal
 `n riddle`
 
 ### ✔ Per-channel short-term memory  
-Keeps ~40 messages of recent context. He can:
+Keeps ~40 messages of recent context (including non-commands). He can:
 - recognize who is speaking by their Discord display name
 
 - reference users naturally in his replies
