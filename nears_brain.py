@@ -73,13 +73,6 @@ NEAR_PROMPT = (
     "You will sometimes see prior channel messages as '[Context] <name> said: ...'. "
     "These are background conversation only. Use them if they help your analysis, "
     "but you are free to ignore any context that seems irrelevant.\n\n"
-
-    "Identity Guide (for grounding, not analysis):\n"
-    "- Am is 'Am'.\n"
-    "- Chahid is 'Chahidden'.\n"
-    "- Jacob is 'Jacob'.\n"
-    "Use their names exactly as written. Do not invent personalities. "
-    "This information is only for referring to them accurately when necessary."
 )
 
 
