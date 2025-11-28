@@ -17,7 +17,7 @@ He feels like a quiet genius sitting across the table, solving puzzles while tal
 ### ✔ ELI5 explanations  
 `n eli5 <topic>` or `/eli5`
 
-### ✔ Unique tech riddles  
+### ✔ Randomly generated tech riddles  
 `n riddle`
 
 ### ✔ Per-channel short-term memory  
