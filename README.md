@@ -37,11 +37,7 @@ The bot estimates cost using the usage object returned by the OpenAI Responses A
 **Specifically**:
 - `usage.input_tokens` – number tokens were sent in (system + history + user message) this request
 - `usage.output_tokens` – number of tokens the model generated in its reply
-- 
 These are multiplied by the current per-million token prices and appended as a small cost footer to each message.
-
-These values are multiplied by the current per-million token prices:
-
 - input:  $1.25 per 1M tokens  
 - output: $10.00 per 1M tokens 
 ---
