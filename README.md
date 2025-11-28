@@ -1,3 +1,5 @@
+![near_example.png](demo/near_example.png)
+
 # **Near — A Quiet, Analytical GPT-5.1 Discord Bot**
 
 > Near is a custom Discord bot powered by **OpenAI GPT-5.1**, designed with a very specific personality:
@@ -34,7 +36,7 @@ Appends logs on every message (except riddles, for aesthetic purposes).
 
 ---
 
-![near_example.png](demo/near_example.png)
+![near_example2.png](demo/near_example2.png)
 
 ---
 
@@ -82,7 +84,3 @@ project/
 
 ## © License
 MIT License — free to modify and use however you wish.
-
----
-
-![near_example2.png](demo/near_example2.png)
