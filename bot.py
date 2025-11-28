@@ -386,6 +386,10 @@ async def generate_cs_question(difficulty: str) -> tuple[str, str, str]:
 
                         "Difficulty guidance (these are suggestions, not hard rules):\n"
                         f"{difficulty_hint}\n\n"
+                        
+                        "### IMPORTANT RULES:\n"
+                        "- Do NOT reuse previous questions.\n"
+                        "- Prefer randomness within allowed domains.\n\n"
 
                         "Domains allowed:\n"
                         "• Algorithms and data structures\n"
