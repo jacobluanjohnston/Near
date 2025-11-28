@@ -32,7 +32,7 @@ Handles long messages and code blocks without breaking formatting.
 ### ✔ Serialized replies  
 Per-channel locks ensure Near never talks over himself.
 
-### ✔ Cost and token estimation
+### ✔ Cost estimation
 The bot estimates cost using the usage object returned by the OpenAI Responses API on every reply.
 **Specifically**:
 - `usage.input_tokens` – number tokens were sent in (system + history + user message) this request
