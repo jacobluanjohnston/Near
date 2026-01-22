@@ -1,5 +1,7 @@
 # **Near — A Quiet, Analytical GPT-5.1 Wrapper (Discord Bot)**
 
+<img width="400" height="400" alt="66a6b9e38d39ee385a624502_Near pfp 400x400 (11)" src="https://github.com/user-attachments/assets/2daa2654-c36f-4e95-9530-f23dde8a0367" />
+
 > Near is a custom Discord bot powered by **OpenAI GPT-5.1**, designed with a very specific personality:
 quiet, observant, analytical, emotionally restrained, calm, and subtly creative.
 
